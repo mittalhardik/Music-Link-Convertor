@@ -92,6 +92,19 @@ music-link-converter/
 
 ## 🚀 Deployment
 
+### Deploy to Google Cloud Platform (Recommended)
+
+This app is configured for Google Cloud Build and Cloud Run deployment. See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions.
+
+**Quick deployment:**
+```bash
+# Enable required APIs
+gcloud services enable cloudbuild.googleapis.com run.googleapis.com containerregistry.googleapis.com
+
+# Deploy with Cloud Build
+gcloud builds submit --config cloudbuild.yaml .
+```
+
 ### Deploy to Heroku
 
 1. **Create a Heroku app**

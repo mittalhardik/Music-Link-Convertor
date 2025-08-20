@@ -16,9 +16,12 @@ app.use(express.static(path.join(__dirname, '.')));
 
 // --- API CLIENT INITIALIZATION ---
 
+// Load environment variables
+require('dotenv').config();
+
 // Spotify API credentials
-const SPOTIFY_CLIENT_ID = 'c245ea30ad4249a5b507c557954e60b3';
-const SPOTIFY_CLIENT_SECRET = 'b9cd3588cfc74574a3d775a853c358b6';
+const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || 'c245ea30ad4249a5b507c557954e60b3';
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || 'b9cd3588cfc74574a3d775a853c358b6';
 
 
 
@@ -276,6 +279,15 @@ app.get('/debug/youtube/:videoId', async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
+});
+
+// Health check endpoint for Cloud Run
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'healthy', 
+        timestamp: new Date().toISOString(),
+        service: 'music-link-converter'
+    });
 });
 
 // Serve the main page
