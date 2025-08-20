@@ -311,21 +311,26 @@
             
             let html = `<p style="text-align: center; margin-bottom: 20px; color: #666;"><strong>Source:</strong> ${data.source}</p>`;
             
-            if (data.links.spotify) {
+            // Only show links for platforms that are NOT the source
+            if (data.links.spotify && data.source !== 'Spotify') {
                 html += `<div class="result-item">
                     <strong>🎵 Spotify</strong>
                     <a href="${data.links.spotify}" target="_blank" rel="noopener noreferrer">${data.links.spotify}</a>
                 </div>`;
             }
             
-            if (data.links.youtubeMusic) {
+            if (data.links.youtubeMusic && data.source !== 'YouTube Music') {
                 html += `<div class="result-item">
                     <strong>🎬 YouTube Music</strong>
                     <a href="${data.links.youtubeMusic}" target="_blank" rel="noopener noreferrer">${data.links.youtubeMusic}</a>
                 </div>`;
             }
             
-            if (Object.keys(data.links).length === 0) {
+            // Check if we have any converted links (excluding the source platform)
+            const hasConvertedLinks = (data.links.spotify && data.source !== 'Spotify') || 
+                                    (data.links.youtubeMusic && data.source !== 'YouTube Music');
+            
+            if (!hasConvertedLinks) {
                 html += `<div class="result-item">
                     <p style="text-align: center; color: #666;">
                         <strong>No conversion found</strong><br>
