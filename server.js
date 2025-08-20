@@ -171,7 +171,7 @@ async function findLinks(metadata) {
             if (response.data.tracks.items.length > 0) {
                 for (const track of response.data.tracks.items) {
                     const score = calculateMatchScore(track.name, track.artists[0].name, cleanTitle, cleanArtist);
-                    if (score > bestSpotifyScore && score > 0.6) { // Only accept good matches
+                    if (score > bestSpotifyScore && score > 0.5) { // Lower threshold to 50% for better matching
                         bestSpotifyScore = score;
                         bestSpotifyMatch = track;
                     }
@@ -196,12 +196,21 @@ async function findLinks(metadata) {
             const response = await ytMusicApi.search(query, "song");
             if (response.content && response.content.length > 0) {
                 for (const item of response.content.slice(0, 5)) {
-                    if (item.name && item.artist) {
-                        const score = calculateMatchScore(item.name, item.artist.name, cleanTitle, cleanArtist);
-                        if (score > bestYouTubeScore && score > 0.6) { // Only accept good matches
-                            bestYouTubeScore = score;
-                            bestYouTubeMatch = item;
+                    // Add proper null checks and debugging
+                    if (item && item.name && item.artist && item.artist.name && item.videoId) {
+                        try {
+                            const score = calculateMatchScore(item.name, item.artist.name, cleanTitle, cleanArtist);
+                            if (score > bestYouTubeScore && score > 0.5) { // Lower threshold to 50% for better matching
+                                bestYouTubeScore = score;
+                                bestYouTubeMatch = item;
+                            }
+                        } catch (scoreError) {
+                            console.error("Error calculating score for YouTube item:", scoreError.message);
+                            continue;
                         }
+                    } else {
+                        // Log the structure of items that don't have the expected properties
+                        console.log("YouTube item structure:", JSON.stringify(item, null, 2));
                     }
                 }
             }
@@ -244,6 +253,17 @@ function calculateMatchScore(trackName1, artistName1, trackName2, artistName2) {
         if (words1.length > 0 && words2.length > 0) {
             trackScore = (commonWords.length / Math.max(words1.length, words2.length)) * 0.6;
         }
+    }
+    
+    // Special handling for cases where one track has additional info like "(feat. X)"
+    // Check if the core track name (first few words) matches
+    const coreWords1 = normalizedTrack1.split(/\s+/).slice(0, 3); // First 3 words
+    const coreWords2 = normalizedTrack2.split(/\s+/).slice(0, 3); // First 3 words
+    const coreMatch = coreWords1.some(word => coreWords2.includes(word)) && 
+                     coreWords2.some(word => coreWords1.includes(word));
+    
+    if (coreMatch && trackScore < 0.6) {
+        trackScore = Math.max(trackScore, 0.6); // Boost score for core word matches
     }
     
     // Calculate artist similarity
@@ -358,6 +378,23 @@ app.get('/debug/youtube/:videoId', async (req, res) => {
         res.json({
             videoId,
             extractedMetadata: metadata
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Debug endpoint to test YouTube Music search with raw response
+app.get('/debug/youtube-search/:query', async (req, res) => {
+    const { query } = req.params;
+    
+    try {
+        await ytMusicApi.initalize();
+        const response = await ytMusicApi.search(query, "song");
+        res.json({
+            query,
+            rawResponse: response,
+            content: response.content ? response.content.slice(0, 3) : []
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
