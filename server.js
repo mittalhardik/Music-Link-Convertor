@@ -59,7 +59,7 @@ async function getSpotifyTrackDetails(trackId) {
     });
     return {
         title: data.name,
-        artist: data.artists[0].name,
+        artist: data.artists.map(a => a.name).join(', '), // Include all artists
         album: data.album.name,
         isrc: data.external_ids.isrc // ISRC is a universal code for recordings
     };
@@ -153,8 +153,14 @@ async function findLinks(metadata) {
         `${cleanTitle} ${cleanArtist}`,
         `${cleanArtist} ${cleanTitle}`,
         cleanTitle,
-        `${cleanTitle} artist:${cleanArtist}`
+        `${cleanTitle} artist:${cleanArtist}`,
+        `${cleanTitle} ${cleanArtist} Saiyaara`, // Add movie name for better matching
+        `${cleanTitle} movie Saiyaara`
     ];
+    
+    console.log('Search queries:', searchQueries);
+    console.log('Clean title:', cleanTitle);
+    console.log('Clean artist:', cleanArtist);
 
     // Search on Spotify
     try {
@@ -192,17 +198,39 @@ async function findLinks(metadata) {
         let bestYouTubeMatch = null;
         let bestYouTubeScore = 0;
 
-        for (const query of searchQueries.slice(0, 2)) { // Use first 2 queries for YouTube
+        for (const query of searchQueries.slice(0, 3)) { // Use first 3 queries for YouTube
+            console.log(`Searching YouTube with query: "${query}"`);
             const response = await ytMusicApi.search(query, "song");
             if (response.content && response.content.length > 0) {
+                console.log(`Found ${response.content.length} results for query: "${query}"`);
                 for (const item of response.content.slice(0, 5)) {
                     // Add proper null checks and debugging
-                    if (item && item.name && item.artist && item.artist.name && item.videoId) {
+                    if (item && item.name && item.videoId) {
                         try {
-                            const score = calculateMatchScore(item.name, item.artist.name, cleanTitle, cleanArtist);
+                            // Handle both single artist and multiple artists
+                            let artistName = '';
+                            if (Array.isArray(item.artist)) {
+                                if (item.artist.length > 0) {
+                                    // Multiple artists - join them
+                                    artistName = item.artist.map(a => a.name).join(', ');
+                                } else {
+                                    // Empty artist array - use album name as fallback
+                                    artistName = item.album && item.album.name ? item.album.name : 'Unknown Artist';
+                                }
+                            } else if (item.artist && item.artist.name) {
+                                // Single artist
+                                artistName = item.artist.name;
+                            } else {
+                                // No artist info - use album name as fallback
+                                artistName = item.album && item.album.name ? item.album.name : 'Unknown Artist';
+                            }
+                            
+                            const score = calculateMatchScore(item.name, artistName, cleanTitle, cleanArtist);
+                            console.log(`Score for "${item.name}" by "${artistName}": ${score}`);
                             if (score > bestYouTubeScore && score > 0.5) { // Lower threshold to 50% for better matching
                                 bestYouTubeScore = score;
                                 bestYouTubeMatch = item;
+                                console.log(`New best match: "${item.name}" by "${artistName}" with score ${score}`);
                             }
                         } catch (scoreError) {
                             console.error("Error calculating score for YouTube item:", scoreError.message);
@@ -213,6 +241,8 @@ async function findLinks(metadata) {
                         console.log("YouTube item structure:", JSON.stringify(item, null, 2));
                     }
                 }
+            } else {
+                console.log(`No results found for query: "${query}"`);
             }
         }
         
@@ -235,9 +265,11 @@ function calculateMatchScore(trackName1, artistName1, trackName2, artistName2) {
     const normalize = (str) => str.toLowerCase().replace(/[^\w\s]/g, '').trim();
     
     const normalizedTrack1 = normalize(trackName1);
-    const normalizedArtist1 = normalize(artistName1);
     const normalizedTrack2 = normalize(trackName2);
-    const normalizedArtist2 = normalize(artistName2);
+    
+    // Handle multiple artists - split by comma, '&', 'and', etc.
+    const artists1 = artistName1.split(/[,&]|\sand\s/).map(a => normalize(a.trim())).filter(a => a);
+    const artists2 = artistName2.split(/[,&]|\sand\s/).map(a => normalize(a.trim())).filter(a => a);
     
     // Calculate track name similarity
     let trackScore = 0;
@@ -266,16 +298,25 @@ function calculateMatchScore(trackName1, artistName1, trackName2, artistName2) {
         trackScore = Math.max(trackScore, 0.6); // Boost score for core word matches
     }
     
-    // Calculate artist similarity
+    // Calculate artist similarity for multiple artists
     let artistScore = 0;
-    if (normalizedArtist1 === normalizedArtist2) {
-        artistScore = 1;
-    } else if (normalizedArtist1.includes(normalizedArtist2) || normalizedArtist2.includes(normalizedArtist1)) {
-        artistScore = 0.8;
+    
+    // Check for exact matches between any artist pairs
+    const exactMatches = artists1.filter(a1 => artists2.includes(a1)).length;
+    const partialMatches = artists1.filter(a1 => 
+        artists2.some(a2 => a1.includes(a2) || a2.includes(a1))
+    ).length;
+    
+    if (exactMatches > 0) {
+        // If there are exact matches, calculate score based on match ratio
+        artistScore = Math.min(1, (exactMatches / Math.max(artists1.length, artists2.length)) * 1.2);
+    } else if (partialMatches > 0) {
+        // If there are partial matches, give a lower score
+        artistScore = Math.min(0.8, (partialMatches / Math.max(artists1.length, artists2.length)) * 0.8);
     } else {
-        // Use simple word overlap for artist names
-        const words1 = normalizedArtist1.split(/\s+/);
-        const words2 = normalizedArtist2.split(/\s+/);
+        // Fallback to simple word overlap for single artist comparison
+        const words1 = artists1.join(' ').split(/\s+/);
+        const words2 = artists2.join(' ').split(/\s+/);
         const commonWords = words1.filter(word => words2.includes(word));
         if (words1.length > 0 && words2.length > 0) {
             artistScore = (commonWords.length / Math.max(words1.length, words2.length)) * 0.6;
