@@ -83,8 +83,15 @@ async function getYouTubeMusicTrackDetails(videoId) {
             // If author contains " - Topic", it's likely the artist
             if (author && author.includes(' - Topic')) {
                 const artist = author.replace(' - Topic', '').trim();
+                // Clean up the title by removing common suffixes and prefixes
+                let cleanTitle = title;
+                // Remove album info in parentheses at the end
+                cleanTitle = cleanTitle.replace(/\s*\([^)]*\)\s*$/, '');
+                // Remove "From the Album" text
+                cleanTitle = cleanTitle.replace(/\s*\(From the Album "[^"]*"\)\s*/, '');
+                
                 return {
-                    title: title,
+                    title: cleanTitle,
                     artist: artist,
                     album: null,
                     isrc: null
@@ -135,45 +142,73 @@ async function getYouTubeMusicTrackDetails(videoId) {
  * Searches for a track on other platforms based on metadata.
  */
 async function findLinks(metadata) {
-    const query = `${metadata.title} ${metadata.artist}`;
     const links = {};
+
+    // Clean up metadata for better search
+    const cleanTitle = metadata.title.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').trim();
+    const cleanArtist = metadata.artist.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').trim();
+    
+    // Create multiple search queries for better matching
+    const searchQueries = [
+        `${cleanTitle} ${cleanArtist}`,
+        `${cleanArtist} ${cleanTitle}`,
+        cleanTitle,
+        `${cleanTitle} artist:${cleanArtist}`
+    ];
 
     // Search on Spotify
     try {
         const token = await getSpotifyToken();
-        const response = await axios.get('https://api.spotify.com/v1/search', {
-            headers: { 'Authorization': `Bearer ${token}` },
-            params: { q: query, type: 'track', limit: 5 }
-        });
-        if (response.data.tracks.items.length > 0) {
-            // Try to find the best match by comparing title and artist
-            const bestMatch = response.data.tracks.items.find(track => 
-                track.name.toLowerCase().includes(metadata.title.toLowerCase()) ||
-                metadata.title.toLowerCase().includes(track.name.toLowerCase())
-            ) || response.data.tracks.items[0];
+        let bestSpotifyMatch = null;
+        let bestSpotifyScore = 0;
+
+        for (const query of searchQueries) {
+            const response = await axios.get('https://api.spotify.com/v1/search', {
+                headers: { 'Authorization': `Bearer ${token}` },
+                params: { q: query, type: 'track', limit: 10 }
+            });
             
-            links.spotify = bestMatch.external_urls.spotify;
+            if (response.data.tracks.items.length > 0) {
+                for (const track of response.data.tracks.items) {
+                    const score = calculateMatchScore(track.name, track.artists[0].name, cleanTitle, cleanArtist);
+                    if (score > bestSpotifyScore && score > 0.6) { // Only accept good matches
+                        bestSpotifyScore = score;
+                        bestSpotifyMatch = track;
+                    }
+                }
+            }
+        }
+        
+        if (bestSpotifyMatch) {
+            links.spotify = bestSpotifyMatch.external_urls.spotify;
         }
     } catch (error) {
         console.error("Error searching Spotify:", error.message);
     }
 
-
-
     // Search on YouTube Music
     try {
         await ytMusicApi.initalize();
-        const response = await ytMusicApi.search(query, "song");
-        if (response.content && response.content.length > 0) {
-            // Try to find the best match by comparing titles
-            const bestMatch = response.content.find(item => 
-                item.name && (
-                    item.name.toLowerCase().includes(metadata.title.toLowerCase()) ||
-                    metadata.title.toLowerCase().includes(item.name.toLowerCase())
-                )
-            ) || response.content[0];
-            
-            const videoId = bestMatch.videoId;
+        let bestYouTubeMatch = null;
+        let bestYouTubeScore = 0;
+
+        for (const query of searchQueries.slice(0, 2)) { // Use first 2 queries for YouTube
+            const response = await ytMusicApi.search(query, "song");
+            if (response.content && response.content.length > 0) {
+                for (const item of response.content.slice(0, 5)) {
+                    if (item.name && item.artist) {
+                        const score = calculateMatchScore(item.name, item.artist.name, cleanTitle, cleanArtist);
+                        if (score > bestYouTubeScore && score > 0.6) { // Only accept good matches
+                            bestYouTubeScore = score;
+                            bestYouTubeMatch = item;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (bestYouTubeMatch) {
+            const videoId = bestYouTubeMatch.videoId;
             links.youtubeMusic = `https://music.youtube.com/watch?v=${videoId}`;
         }
     } catch (error) {
@@ -181,6 +216,54 @@ async function findLinks(metadata) {
     }
 
     return links;
+}
+
+/**
+ * Calculate a match score between two track/artist pairs.
+ * Returns a score between 0 and 1, where 1 is a perfect match.
+ */
+function calculateMatchScore(trackName1, artistName1, trackName2, artistName2) {
+    const normalize = (str) => str.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    
+    const normalizedTrack1 = normalize(trackName1);
+    const normalizedArtist1 = normalize(artistName1);
+    const normalizedTrack2 = normalize(trackName2);
+    const normalizedArtist2 = normalize(artistName2);
+    
+    // Calculate track name similarity
+    let trackScore = 0;
+    if (normalizedTrack1 === normalizedTrack2) {
+        trackScore = 1;
+    } else if (normalizedTrack1.includes(normalizedTrack2) || normalizedTrack2.includes(normalizedTrack1)) {
+        trackScore = 0.8;
+    } else {
+        // Use simple word overlap
+        const words1 = normalizedTrack1.split(/\s+/);
+        const words2 = normalizedTrack2.split(/\s+/);
+        const commonWords = words1.filter(word => words2.includes(word));
+        if (words1.length > 0 && words2.length > 0) {
+            trackScore = (commonWords.length / Math.max(words1.length, words2.length)) * 0.6;
+        }
+    }
+    
+    // Calculate artist similarity
+    let artistScore = 0;
+    if (normalizedArtist1 === normalizedArtist2) {
+        artistScore = 1;
+    } else if (normalizedArtist1.includes(normalizedArtist2) || normalizedArtist2.includes(normalizedArtist1)) {
+        artistScore = 0.8;
+    } else {
+        // Use simple word overlap for artist names
+        const words1 = normalizedArtist1.split(/\s+/);
+        const words2 = normalizedArtist2.split(/\s+/);
+        const commonWords = words1.filter(word => words2.includes(word));
+        if (words1.length > 0 && words2.length > 0) {
+            artistScore = (commonWords.length / Math.max(words1.length, words2.length)) * 0.6;
+        }
+    }
+    
+    // Combined score (weighted average: 70% track, 30% artist)
+    return (trackScore * 0.7) + (artistScore * 0.3);
 }
 
 
