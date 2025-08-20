@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Link Converter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+        
+        .input-group {
+            margin-bottom: 30px;
+            text-align: left;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 1rem;
+        }
+        
+        input[type="url"] {
+            width: 100%;
+            padding: 16px;
+            border: 2px solid #e1e5e9;
+            border-radius: 12px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+        
+        input[type="url"]:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 32px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .results {
+            margin-top: 30px;
+            padding: 30px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 16px;
+            display: none;
+            text-align: left;
+        }
+        
+        .results h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+            text-align: center;
+        }
+        
+        .result-item {
+            margin: 15px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            transition: transform 0.2s ease;
+        }
+        
+        .result-item:hover {
+            transform: translateX(5px);
+        }
+        
+        .result-item strong {
+            color: #333;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 8px;
+        }
+        
+        .result-item a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            word-break: break-all;
+            line-height: 1.4;
+        }
+        
+        .result-item a:hover {
+            text-decoration: underline;
+        }
+        
+        .error {
+            color: #dc3545;
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            padding: 16px;
+            border-radius: 12px;
+            margin-top: 20px;
+            border-left: 4px solid #dc3545;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #666;
+            margin-top: 20px;
+            font-size: 1.1rem;
+        }
+        
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .platform-badges {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .platform-badge {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .spotify-badge {
+            background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+        }
+        
+        .youtube-badge {
+            background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 30px 20px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .platform-badges {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Music Link Converter</h1>
+        <p class="subtitle">
+            Convert music links between Spotify and YouTube Music seamlessly
+        </p>
+        
+        <div class="platform-badges">
+            <span class="platform-badge spotify-badge">Spotify</span>
+            <span class="platform-badge youtube-badge">YouTube Music</span>
+        </div>
+        
+        <div class="input-group">
+            <label for="musicLink">Enter a music link:</label>
+            <input type="url" id="musicLink" placeholder="https://open.spotify.com/track/... or https://music.youtube.com/watch?v=..." required>
+        </div>
+        
+        <button onclick="convertLink()" id="convertBtn">Convert Link</button>
+        
+        <div id="loading" class="loading" style="display: none;">
+            Converting your link...
+        </div>
+        
+        <div id="results" class="results">
+            <h3>Converted Links:</h3>
+            <div id="linksList"></div>
+        </div>
+        
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        async function convertLink() {
+            const link = document.getElementById('musicLink').value;
+            const convertBtn = document.getElementById('convertBtn');
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            const error = document.getElementById('error');
+            const linksList = document.getElementById('linksList');
+            
+            if (!link) {
+                showError('Please enter a valid music link');
+                return;
+            }
+            
+            // Validate link format
+            if (!link.includes('spotify.com') && !link.includes('youtube.com') && !link.includes('music.youtube.com')) {
+                showError('Please enter a valid Spotify or YouTube Music link');
+                return;
+            }
+            
+            // Show loading state
+            convertBtn.disabled = true;
+            loading.style.display = 'block';
+            results.style.display = 'none';
+            error.style.display = 'none';
+            
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ link })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayResults(data);
+                } else {
+                    showError(data.error || 'Failed to convert link');
+                }
+            } catch (err) {
+                showError('Network error. Please check your connection and try again.');
+            } finally {
+                convertBtn.disabled = false;
+                loading.style.display = 'none';
+            }
+        }
+        
+        function displayResults(data) {
+            const results = document.getElementById('results');
+            const linksList = document.getElementById('linksList');
+            
+            let html = `<p style="text-align: center; margin-bottom: 20px; color: #666;"><strong>Source:</strong> ${data.source}</p>`;
+            
+            if (data.links.spotify) {
+                html += `<div class="result-item">
+                    <strong>🎵 Spotify</strong>
+                    <a href="${data.links.spotify}" target="_blank" rel="noopener noreferrer">${data.links.spotify}</a>
+                </div>`;
+            }
+            
+            if (data.links.youtubeMusic) {
+                html += `<div class="result-item">
+                    <strong>🎬 YouTube Music</strong>
+                    <a href="${data.links.youtubeMusic}" target="_blank" rel="noopener noreferrer">${data.links.youtubeMusic}</a>
+                </div>`;
+            }
+            
+            if (Object.keys(data.links).length === 0) {
+                html += `<div class="result-item">
+                    <p style="text-align: center; color: #666;">
+                        <strong>No conversion found</strong><br>
+                        We couldn't find a matching track on the other platform. 
+                        This might be because the track is exclusive to ${data.source} or we couldn't match it accurately.
+                    </p>
+                </div>`;
+            }
+            
+            linksList.innerHTML = html;
+            results.style.display = 'block';
+        }
+        
+        function showError(message) {
+            const error = document.getElementById('error');
+            error.textContent = message;
+            error.style.display = 'block';
+        }
+        
+        // Allow Enter key to submit
+        document.getElementById('musicLink').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                convertLink();
+            }
+        });
+        
+        // Focus on input when page loads
+        window.addEventListener('load', function() {
+            document.getElementById('musicLink').focus();
+        });
+    </script>
+</body>
+</html> 
