@@ -366,6 +366,44 @@ app.post('/convert', async (req, res) => {
     }
 });
 
+// New endpoint that calls the existing /convert API and modifies its response
+app.post('/convert-single', async (req, res) => {
+    try {
+        // Make an internal HTTP request to the existing /convert endpoint
+        const response = await axios.post(`http://localhost:${port}/convert`, req.body, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        // Extract the response data from the existing endpoint
+        const { source, links } = response.data;
+        
+        // Find a link from a different platform than the source
+        let alternativeLink = null;
+        if (source === 'Spotify' && links.youtubeMusic) {
+            alternativeLink = links.youtubeMusic;
+        } else if (source === 'YouTube Music' && links.spotify) {
+            alternativeLink = links.spotify;
+        }
+
+        if (alternativeLink) {
+            res.set('Content-Type', 'text/plain');
+            res.send(alternativeLink);
+        } else {
+            res.status(404).send('No alternative link found');
+        }
+
+    } catch (error) {
+        console.error('Error calling /convert endpoint:', error.message);
+        if (error.response) {
+            // Forward the error from the original endpoint
+            res.status(error.response.status).send(error.response.data.error || 'Conversion failed');
+        } else {
+            res.status(500).send('Failed to convert link. The API might be down or the link is invalid.');
+        }
+    }
+});
 
 // Debug endpoint to test search functionality
 app.get('/debug/search/:platform', async (req, res) => {
